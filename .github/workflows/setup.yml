@@ -1,0 +1,78 @@
+name: Execute template to populate repository
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup-repo:
+    if: ${{ github.repository != 'PrashamTrivedi/template-node-cli' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Run NPM install
+        run: npm install
+
+      - uses: actions/github-script@v7
+        id: fetch-repo-and-user-details
+        with:
+          script: |
+            const query = `query($owner:String!, $name:String!) {
+              repository(owner:$owner, name:$name) {
+                name
+                description
+                owner {
+                  login
+                  ... on User {
+                    name
+                  }
+                  ... on Organization {
+                    name
+                  }
+                }
+              }
+            }`;
+            const variables = {
+              owner: context.repo.owner,
+              name: context.repo.repo
+            }
+            const result = await github.graphql(query, variables)
+            console.log(result)
+            return result
+
+       - name: Replace strings
+         env:
+            INFO: ${{ steps.fetch-repo-and-user-details.outputs.result }}
+         run: |
+            find . -type f -not -path './.git/*' -exec sed -i 's/REPO_NAME/${{ github.event.repository.name }}/g' {} +
+
+      - name: Cleanup
+        run: |
+          rm .github/workflows/setup.yml
+
+      - name: Commit changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add -A
+          git commit -m "Replace generic strings with repository name" || echo "No changes to commit"
+          git push
+
+      - name: Force push new repo contents
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Initial library structure"
+          push_options: --force

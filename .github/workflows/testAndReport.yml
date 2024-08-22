@@ -1,0 +1,104 @@
+name: Test and Report
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 1'  # Run every Monday at midnight UTC
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Build the package
+      run: npm run build
+
+    - name: Run tests
+      run: npm run test:ci
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage/
+    
+    - name: Post test and coverage summary
+      run: |
+        # Determine the path prefix to remove
+        REPO_ROOT="${GITHUB_WORKSPACE}"
+        REPO_NAME="${GITHUB_REPOSITORY#*/}"
+        PATH_PREFIX="${REPO_ROOT}/${REPO_NAME}/"
+
+         # Get the actual path prefix from the first file in the coverage summary
+        ACTUAL_PREFIX=$(jq -r 'to_entries | map(select(.key != "total")) | .[0].key | capture("(?<prefix>.*/)(?:[^/]+)$").prefix' ./coverage/coverage-summary.json)
+        
+        echo "Calculated PATH_PREFIX: $PATH_PREFIX"
+        echo "Actual PATH_PREFIX from coverage data: $ACTUAL_PREFIX"
+        
+        # Use the actual prefix if it's different from our calculation
+        if [ "$ACTUAL_PREFIX" != "$PATH_PREFIX" ]; then
+          echo "Using actual prefix from coverage data"
+          PATH_PREFIX=$ACTUAL_PREFIX
+        fi
+        
+        echo "Final PATH_PREFIX: $PATH_PREFIX"
+
+        # Get the current branch name
+        BRANCH_NAME=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+        
+        echo "# Test and Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        
+        
+        echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        total_tests=$(jq '.numTotalTests' ./coverage/test-summary.json)
+        failed_tests=$(jq '.numFailedTests' ./coverage/test-summary.json)
+        echo "Total Tests: $total_tests" >> $GITHUB_STEP_SUMMARY
+        echo "Failed Tests: $failed_tests" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        
+        if [ $failed_tests -gt 0 ]; then
+          echo "### Failed Tests" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          jq -r '.testResults[] | select(.status == "failed") | .name' ./coverage/test-summary.json >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "## Test Details" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
+        jq '.testResults[] | {name: .name, status: .status, duration: .duration}' ./coverage/test-summary.json >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        
+        echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Type | Total | Covered | Skipped | Percentage |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|-------|---------|---------|------------|" >> $GITHUB_STEP_SUMMARY
+        jq -r '.total | to_entries[] | "| \(.key) | \(.value.total) | \(.value.covered) | \(.value.skipped) | \(.value.pct)% |"' ./coverage/coverage-summary.json >> $GITHUB_STEP_SUMMARY
+        
+         echo "## File Coverage" >> $GITHUB_STEP_SUMMARY
+        echo "| File | Lines | Statements | Functions | Branches |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|-------|------------|-----------|----------|" >> $GITHUB_STEP_SUMMARY
+        jq -r --arg prefix "$PATH_PREFIX" --arg repo "$GITHUB_REPOSITORY" --arg branch "$BRANCH_NAME" '
+          to_entries[] 
+          | select(.key != "total" and (.value.lines.total > 0 or .value.statements.total > 0 or .value.functions.total > 0 or .value.branches.total > 0)) 
+          | .key as $fullPath 
+          | .value as $coverage 
+          | $fullPath 
+          | ltrimstr($prefix) as $truncatedPath 
+          | "| [\($truncatedPath)](https://github.com/\($repo)/blob/\($branch)/\($truncatedPath)) | \($coverage.lines.pct)% | \($coverage.statements.pct)% | \($coverage.functions.pct)% | \($coverage.branches.pct)% |"
+        ' ./coverage/coverage-summary.json >> $GITHUB_STEP_SUMMARY
