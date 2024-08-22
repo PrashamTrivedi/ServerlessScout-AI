@@ -54,11 +54,11 @@ jobs:
           console.log(result)
           return result
 
-      - name: Replace strings
-        env:
-          INFO: ${{ steps.fetch-repo-and-user-details.outputs.result }}
-        run: |
-          find . -type f -not -path './.git/*' -exec sed -i 's/REPO_NAME/${{ github.event.repository.name }}/g' {} +
+    - name: Replace strings
+      env:
+        INFO: ${{ steps.fetch-repo-and-user-details.outputs.result }}
+      run: |
+        find . -type f -not -path './.git/*' -exec sed -i 's/REPO_NAME/${{ github.event.repository.name }}/g' {} +
 
     - name: Cleanup
       run: |
