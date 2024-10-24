@@ -1,0 +1,12 @@
+{
+    "github.copilot.chat.experimental.inlineChatCompletionTrigger.enabled": true,
+    "deno.enable": true,
+    "github.copilot.chat.experimental.codeGeneration.instructions": [
+        {
+            "file": "conventions.md"
+        },
+        {
+            "file": "aider-docs/mainFunctionality.md"
+        }
+    ],
+}

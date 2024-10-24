@@ -152,3 +152,10 @@ npm-debug.log*
 # Operating System Files
 .DS_Store
 Thumbs.db
+
+ServerlessScout-AI
+
+aider-docs/
+
+# Debug data
+debug_data.json
