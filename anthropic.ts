@@ -203,7 +203,6 @@ export async function continueConversation(userMessages: Array<{role: "user" | "
             userMessages
         }))
     }
-    console.log({messages: userMessages, systemPrompt})
     const response = await client.messages.create({
         max_tokens: 8192,
         model: modelId,

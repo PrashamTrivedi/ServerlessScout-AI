@@ -166,10 +166,14 @@ export const chatCommand = new Command<GlobalOptions>()
                             messages.push(message)
                         } else {
                             const message: {role: "user", content: string} = {role: "user", content: userInput}
+                            if (!spinner.isSpinning) {
+                                spinner.start()
+                            }
+                            spinner.text = "Thinking..."
 
                             messages.push(message)
-                            command = await continueConversation(messages, true, isVerbose)
-
+                            command = await continueConversation(messages, false, isVerbose)
+                            spinner.succeed()
                         }
                         const commandString = await ensureString(command)
 
