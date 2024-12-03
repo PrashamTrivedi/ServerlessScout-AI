@@ -1,5 +1,6 @@
+import {Logger} from "jsr:@std/log@0.219.1/logger"
 
-export async function executeAwsCommand(command: string, isVerbose: boolean): Promise<any> {
+export async function executeAwsCommand(command: string, isVerbose: boolean, logger: Logger): Promise<any> {
     if (isVerbose) {
         console.log(JSON.stringify({level: "info", message: "Executing AWS command", command, args: command.split(" ").splice}))
     }
@@ -17,9 +18,10 @@ export async function executeAwsCommand(command: string, isVerbose: boolean): Pr
         const commandError = new TextDecoder().decode(stderr)
         const output = new TextDecoder().decode(stdout)
 
+        logger.info({code, command})
         if (code === 0) {
             if (isVerbose) {
-                console.log(JSON.stringify({level: "info", message: "AWS command executed successfully", command, output}))
+                logger.info(JSON.stringify({level: "info", message: "AWS command executed successfully", command, output}))
             }
             return JSON.parse(output)
         } else {

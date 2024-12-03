@@ -11,11 +11,13 @@ import {
     continueConversation,
     figuringOutStackName
 } from "../anthropic.ts"
-import {listStackResources} from "../utils.ts"
+import {getLogFileName, listStackResources, writeJsonToFile} from "../utils.ts"
 import {executeAwsCommand} from "../commandRunner.ts"
 import type {GlobalOptions} from "../index.ts"
 import {wait} from "jsr:@denosaurs/wait"
 import {getStringFromStringIterator} from "../utils.ts"
+import {format} from "jsr:@std/datetime@0.219.1"
+import * as log from "jsr:@std/log@0.219.1"
 
 function extractFileNames(node: FileNode): string[] {
     let fileNames: string[] = []
@@ -32,6 +34,26 @@ function extractFileNames(node: FileNode): string[] {
 
 
 
+await log.setup({
+    handlers: {
+        console: new log.ConsoleHandler("WARN", {
+            formatter: log.formatters.jsonFormatter,
+        }),
+        file: new log.FileHandler("DEBUG", {
+            filename: getLogFileName(),
+            mode: "w",
+            formatter: log.formatters.jsonFormatter,
+        })
+    },
+    loggers: {
+        default: {
+            level: "DEBUG",
+            handlers: ["console", "file"],
+        },
+    },
+})
+// Initialize logger
+const logger = log.getLogger()
 
 export const chatCommand = new Command<GlobalOptions>()
     .name("chat")
@@ -71,6 +93,9 @@ export const chatCommand = new Command<GlobalOptions>()
             console.log(colors.green("Chat configuration set successfully."))
             console.log(colors.blue("Processing codebase..."))
 
+            const isCurrentDir = config.codeBase === '.'
+            const projectName = isCurrentDir ? Deno.cwd().split('/').pop() ?? "" : config.codeBase
+
             // Create JSON file of codebase
             const codebaseStructure = await getDirStructure(config.codeBase, [], isVerbose)
             if (isVerbose) {
@@ -82,8 +107,7 @@ export const chatCommand = new Command<GlobalOptions>()
             }
 
 
-            // const codebaseJson = JSON.stringify(codebaseStructure, null, 2)
-            // await Deno.writeTextFile("codebase_structure.json", codebaseJson)
+            await writeJsonToFile(projectName, "codebase_structure.json", codebaseStructure)
 
             console.log(colors.green("Codebase structure saved to codebase_structure.json"))
             const spinner = wait("Processing codebase...")
@@ -124,9 +148,10 @@ export const chatCommand = new Command<GlobalOptions>()
                     stackResources: stackResources,
                     timestamp: new Date().toISOString()
                 }
-                await Deno.writeTextFile(
+                await writeJsonToFile(
+                    projectName,
                     "debug_data.json",
-                    JSON.stringify(debugData, null, 2)
+                    debugData
                 )
 
                 // Pass IaC file contents to figuringOutResources
@@ -157,7 +182,8 @@ export const chatCommand = new Command<GlobalOptions>()
                         if (messages.length === 0) {
 
                             const resourcesResponseAsString = await ensureString(resourcesResponse)
-                            spinner.text = "Processing your question..."
+                            // spinner.text = "Processing your question..."
+                            spinner.stop()
                             // Get command from AI
                             command = await figuringOutCommands(resourcesResponseAsString, userInput, config.profile, config.region, stackName, JSON.stringify(stackResources), true, isVerbose)
 
@@ -169,35 +195,42 @@ export const chatCommand = new Command<GlobalOptions>()
                             if (!spinner.isSpinning) {
                                 spinner.start()
                             }
-                            spinner.text = "Thinking..."
+                            // spinner.text = "Thinking..."
+                            spinner.stop()
 
                             messages.push(message)
-                            command = await continueConversation(messages, false, isVerbose)
+                            command = await continueConversation(messages, true, isVerbose)
                             spinner.succeed()
                         }
                         const commandString = await ensureString(command)
 
                         let commandData = commandString
 
+                        logger.debug({commandData})
                         if (commandData.startsWith("answer:")) {
                             commandData = commandData.substring("answer:".length)
+                            console.log(commandData)
                         } else if (commandData.startsWith("command:")) {
-
-                            commandData = commandData.substring("command:".length)
+                            logger.info(`Command: ${commandData}`)
+                            logger.debug('Starts with command')
+                            commandData = commandData.substring("command:".length).trim()
+                            logger.info({commandData})
                             console.log(colors.yellow("Assistant:"), commandString)
-                            const commandResult = await executeAwsCommand(commandString, isVerbose)
+                            spinner.text = "Executing command..."
+                            const commandResult = await executeAwsCommand(commandData, isVerbose, logger)
+                            spinner.stop()
 
-
+                            logger.info({commandResult})
 
                             // Explain the output
-                            const explanation = await explainingOutput(userInput, commandString, JSON.stringify(commandResult), true, isVerbose)
+                            const explanation = await explainingOutput(userInput, commandData, JSON.stringify(commandResult), true, isVerbose)
                             let explanationStr = ""
                             if (typeof explanation === "string") {
 
                                 explanationStr = explanation
                                 console.log(colors.yellow("Assistant:"), explanationStr)
                             } else {
-
+                                console.log(colors.yellow("Assistant:"))
                                 for await (const chunk of explanation as AsyncIterable<string>) {
                                     explanationStr += chunk
                                     Deno.stdout.write(new TextEncoder().encode(chunk))
@@ -207,7 +240,7 @@ export const chatCommand = new Command<GlobalOptions>()
                             }
                             commandData = explanationStr
                         }
-                        console.log(commandData)
+                        // 
                         // Execute the command
 
                         const response: {role: "assistant", content: string} =

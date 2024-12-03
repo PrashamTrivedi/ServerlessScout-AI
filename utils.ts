@@ -1,8 +1,10 @@
 
 import {join} from "https://deno.land/std/path/mod.ts"
+import {ensureDirSync} from "https://deno.land/std@0.224.0/fs/ensure_dir.ts"
 
 const CONFIG_DIR = join(Deno.env.get("HOME") || ".", 'serverlessScout')
 const CONFIG_FILE = join(Deno.env.get("HOME") || ".", "serverlessScout", "config.json")
+const LOG_FILE = join(Deno.env.get("HOME") || ".", "serverlessScout", "log.json")
 
 
 export async function getStringFromStringIterator(iterator: AsyncIterable<string>) {
@@ -35,7 +37,8 @@ interface Config {
 
 export async function WriteConfig(config: Config): Promise<void> {
   try {
-    await Deno.mkdir(CONFIG_DIR, {recursive: true})
+    // await Deno.mkdir(CONFIG_DIR, {recursive: true})
+    ensureDirSync(CONFIG_DIR)
     await Deno.writeTextFile(CONFIG_FILE, JSON.stringify(config, null, 2))
   } catch (error) {
     console.log(error)
@@ -87,4 +90,16 @@ export async function listStackResources(
   }
 
   return JSON.parse(new TextDecoder().decode(stdout))
+}
+
+
+export function writeJsonToFile(directory: string, fileName: string, data: any): void {
+  const projectDir = `${CONFIG_DIR}/${directory}`
+  ensureDirSync(projectDir)
+  Deno.writeTextFileSync(`${projectDir}/${fileName}`, JSON.stringify(data, null, 2))
+}
+
+export function getLogFileName(): string {
+  ensureDirSync(CONFIG_DIR)
+  return LOG_FILE
 }

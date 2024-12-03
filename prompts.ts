@@ -40,7 +40,7 @@ export const prompts: Record<string, PromptData> = {
         prompt: `You have resources list in <ResourceList> tag. 
         Existing deployed cloudformation stack in <ExistingStack> tag.
         Stack resources in <StackResources> tag.
-        And you will have user query in <UserQuery> tag. 
+        And the user query in <UserQuery> tag. 
         Based on Resources, existing stack, stack resources, and Query, answer the question of user, default to answer from existing resources
         if you think an aws CLI command will give more clarity, respond with cli command to help answer the query, 
         the user will run the command and provide you the answer. If you are creating CLI Command, start with command: text otherwise start with answer: text your 
