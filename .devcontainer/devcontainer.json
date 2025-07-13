@@ -1,6 +1,6 @@
 {
 	"name": "TEMPLATE_REPO_NAME devcontainer",
-	"image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
+	"image": "mcr.microsoft.com/devcontainers/javascript-node:3-20-bullseye",
 	"features": {
 		"ghcr.io/devcontainers/features/git:1": {},
 		"ghcr.io/meaningful-ooo/devcontainer-features/fish:1": {},
